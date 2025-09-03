@@ -1,1 +1,7 @@
-download_models/
+/__pycache__/
+/.pytest_cache/
+/download_models/
+/.github/
+/light_kinfer.egg-info/
+/my_weight/
+/.vscode/
