@@ -573,7 +573,7 @@ class LlamaForCausalLM(nn.Module):
         
         # 5. 加载权重到模型
         missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
-        
+        print(missing_keys)
         # 6. 处理权重共享情况
         # 如果lm_head.weight缺失且配置要求权重共享，则共享embed_tokens的权重
         if 'lm_head.weight' in missing_keys and config.tie_word_embeddings:
@@ -692,6 +692,28 @@ def _prepare_4d_causal_attention_mask(attention_mask, input_shape, inputs_embeds
     
     返回:
     - 4D因果注意力掩码 [batch_size, 1, seq_len, seq_len_with_past]
+    
+    具体例子:
+    假设我们有一个序列 ["Hello", "world", "!"]，seq_len=3，past_key_values_length=0
+    
+    1. 初始因果掩码（下三角矩阵，True表示可以关注）:
+       [[True,  False, False],   # "Hello" 只能看到自己
+        [True,  True,  False],   # "world" 可以看到 "Hello" 和自己  
+        [True,  True,  True ]]   # "!" 可以看到前面所有token
+    
+    2. 如果attention_mask=[1, 1, 0]（最后一个位置是padding）:
+       [[True,  False, False],   # "Hello" 只能看到自己
+        [True,  True,  False],   # "world" 可以看到 "Hello" 和自己
+        [True,  True,  False]]   # "!" 不能看到padding位置（自己）
+    
+    3. 转换为注意力权重掩码（-inf表示被掩蔽，0.0表示可关注）:
+       [[  0.0, -inf, -inf],
+        [  0.0,  0.0, -inf], 
+        [  0.0,  0.0, -inf]]
+    
+    4. 在生成阶段，如果past_key_values_length=2（已有2个历史token）:
+       当前输入是新的1个token，它可以关注所有历史token：
+       [[0.0, 0.0, 0.0]]  # 新token可以关注2个历史token + 自己
     """
     batch_size, seq_length = input_shape
     dtype = inputs_embeds.dtype

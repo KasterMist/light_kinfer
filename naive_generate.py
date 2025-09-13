@@ -5,7 +5,7 @@ from pathlib import Path
 from light_kinfer.utils.common import get_gpu_memory, detect_device, count_tokens, get_model_type
 from light_kinfer.utils.prompt_templates import get_prompter
 from light_kinfer.utils.logger import get_logger
-from light_kinfer.models.naive_llama_backup_2 import LlamaForCausalLM
+from light_kinfer.models.naive_llama import LlamaForCausalLM
 
 import sys, os, time
 from transformers import AutoTokenizer

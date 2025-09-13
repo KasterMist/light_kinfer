@@ -236,19 +236,44 @@ def convert(checkpoints_dir: Path,
     spec = _SPEC[model_type]
     mapping = build_mapping(spec["common"], spec["layer"], num_layers)
     new_sd: dict[str, torch.Tensor] = {}
+    
+    # 记录未转换的参数
+    unmapped_params = []
+    mapped_params = []
 
+    logger.info("转换前参数数量: %d", len(hf_state))
     # ---------- 1. 重映射 ----------
     for k, v in tqdm(hf_state.items(), desc=f"[{model_type}] 权重重映射"):
         if (ck := mapping.get(k)) is not None:
             new_sd[ck] = v
+            mapped_params.append(k)
         else:
+            unmapped_params.append(k)
             logger.debug("忽略未映射参数 %s", k)
+    
+    # 打印详细的转换信息
+    logger.info("成功转换的参数数量: %d", len(mapped_params))
+    logger.info("未转换的参数数量: %d", len(unmapped_params))
+    
+    if unmapped_params:
+        logger.warning("以下参数没有被转换:")
+        for param in sorted(unmapped_params):
+            logger.warning("  - %s", param)
 
     # ---------- 2. 仅对 *Qwen* 系列执行 KV权重 合并(拼接) ----------
+    kv_merged_count = 0
     if model_type.startswith("qwen") or model_type.startswith("llama"):              # 只处理 Qwen-2 / Qwen-3 等
         for i in range(num_layers):
             prefix = f"layers.{i}.self_attn"       # Qwen 无额外前缀
+            before_count = len(new_sd)
             merge_kv_weights(new_sd, prefix, with_bias=spec["merge_bias"])
+            after_count = len(new_sd)
+            if before_count != after_count:
+                kv_merged_count += 1
+                logger.info("层 %d: KV权重合并完成，参数数量从 %d 变为 %d", i, before_count, after_count)
+
+    if kv_merged_count > 0:
+        logger.info("总共有 %d 层执行了KV权重合并", kv_merged_count)
 
     # ---------- 3. 保存 ----------
     script_root = Path(__file__).resolve().parent
@@ -257,6 +282,11 @@ def convert(checkpoints_dir: Path,
     copy_metadata(checkpoints_dir, out_dir)
 
     logger.info("🎉 转换完成，共 %d 个参数", len(new_sd))
+    
+    # 如果有未转换的参数，再次提醒
+    if unmapped_params:
+        logger.warning("⚠️  总计有 %d 个参数未被转换，请检查是否需要更新映射规则", len(unmapped_params))
+
     return new_sd
 
 
@@ -334,7 +364,7 @@ def main() -> None:
 
     ckpt_dir: Path = args.checkpoints_dir.resolve()
     
-    # 1️⃣ **直接从 config.json 读取 model_type** ↓
+    # 1️⃣ **直接从 config.json 读取 model_type** 
     model_type = detect_model_type(ckpt_dir)
     logger.info("检测到 model_type = %s", model_type)
 
