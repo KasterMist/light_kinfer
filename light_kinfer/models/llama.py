@@ -238,7 +238,7 @@ class LlamaDecoderLayer(nn.Module):
         self.num_heads = config.num_heads
         self.hidden_size = config.hidden_size
         self.head_dim = config.head_dim if config.head_dim is not None else self.hidden_size // self.num_heads
-        self.rmsnorm_eps = config.rmsnorm_eps
+        self.rmsnorm_eps = config.rms_norm_eps
 
         # 注意力层的RMSNorm权重参数，形状: [hidden_size]
         self.attention_norm_weight = nn.Parameter(

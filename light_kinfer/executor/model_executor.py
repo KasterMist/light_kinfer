@@ -67,7 +67,7 @@ from accelerate import init_empty_weights, load_checkpoint_and_dispatch
 from light_kinfer.executor.mem_manager import ComputeMaxAvailableBlocks, KVCacheMemoryManager
 from light_kinfer.executor.req_tokens_manager import ReqTokensManager
 
-# from light_kinfer.cuda_graph import ModelRunner
+from light_kinfer.executor.cuda_graph import ModelRunner
 from light_kinfer.executor.executor_struct import AttentionInfo, CONFIG_CLASS_MAP
 from light_kinfer.models.model_config import LlamaConfig
 from light_kinfer.kernels import update_kv_index
@@ -79,7 +79,6 @@ logger = get_logger(__name__)
 # Registry helpers (avoid long if/elif chains)
 # -----------------------------------------------------------------------------
 
-# TODO: understand
 class ModelExecutor:
     # 定义类属性
     model_config = None
@@ -220,7 +219,7 @@ class ModelExecutor:
         # model.to(device)
 
         if model_type == "llama":
-            from light_kinfer.models.naive_llama import LlamaModel
+            from light_kinfer.models.llama import LlamaModel
             model = LlamaModel(model_config)
         # elif model_type == "qwen2":
         #     from light_kinfer.models.qwen2 import Qwen2Model
@@ -250,7 +249,7 @@ class ModelExecutor:
         self.model_config = model_config
         self.device = device
         if isinstance(model_config, LlavaConfig):
-            self.llm_config = LlamaConfig.from_dict(model_config.text_config.to_dict())
+            self.llm_config = LlavaConfig.from_dict(model_config.text_config.to_dict())
             print(f"self.llm_config.max_seq_len: {self.llm_config.max_seq_len}")
         else:
             self.llm_config = model_config
@@ -259,19 +258,22 @@ class ModelExecutor:
         self.model_type = model_config.model_type
         self.model = model
         self.model_runner = None
+        self.compiled_model = compiled_model
 
         if max_gpu_num_blocks:
-            self.kv_mem_manager = self._init_mem_manager(max_gpu_num_blocks)
-            self.max_gpu_num_tokens = max_gpu_num_blocks
+            self.kv_mem_manager = self._init_mem_manager(max_gpu_num_blocks, block_size=4)
+            self.max_gpu_num_tokens = max_gpu_num_blocks * 4
         else:
             max_gpu_num_blocks, self.max_gpu_num_tokens = (
-                self._get_max_avaliable_tokens(model,gpu_memory_utilization=0.9, block_size=1)
+                self._get_max_avaliable_tokens(model,gpu_memory_utilization=0.9, block_size=4)
             )
             self.kv_mem_manager = self._init_mem_manager(
-                max_gpu_num_blocks, block_size=1
+                max_gpu_num_blocks, block_size=4
             )
 
-        self.max_request_num = max_gpu_num_blocks // self.max_seq_len
+        # WARN : 此处如果batch size不为1的前提下，应将max_gpu_num_blocks替换为max_gpu_num_tokens
+        self.max_request_num = self.max_gpu_num_tokens // self.max_seq_len
+        # self.max_request_num = max_gpu_num_blocks // self.max_seq_len
 
         self.req_tokens_manager = ReqTokensManager(
             self.max_request_num, self.max_seq_len
@@ -280,12 +282,12 @@ class ModelExecutor:
         self.atten_info.kv_buffer = self.kv_mem_manager.gpu_kv_buffer
         self.atten_info.b_req_tokens_table = self.req_tokens_manager.b_req_tokens_table
 
-        # TODO apply_cuda_graph 新代码有 bug，已经删去，后续等待修复
-        self.compiled_model = False
+        # apply_cuda_graph 
+        # self.compiled_model = False
         if self.compiled_model:
             self.apply_cuda_graph()  # 调用 cuda graph 优化
 
-    def _get_max_avaliable_tokens(self,model, gpu_memory_utilization=0.9, block_size=1):
+    def _get_max_avaliable_tokens(self, model, gpu_memory_utilization=0.9, block_size=1):
         avaliable_blocks = ComputeMaxAvailableBlocks(
             num_layers=self.llm_config.num_layers,
             hidden_size=self.llm_config.hidden_size,
@@ -324,14 +326,14 @@ class ModelExecutor:
             - input_ids: 输入 tokens id 列表, shape: (batch_size, 1)
             - prev_pos: 当前处于第几轮迭代循环, 生成第几个 token
         """
-        # self.model_runner = ModelRunner(
-        #     self.model,
-        #     self.llm_config,
-        #     self.max_gpu_num_tokens,
-        #     self.kv_mem_manager,
-        #     self.req_tokens_manager,
-        # )
-        # self.model_runner.capture_decode_graph()
+        self.model_runner = ModelRunner(
+            self.model,
+            self.llm_config,
+            self.max_gpu_num_tokens,
+            self.kv_mem_manager,
+            self.req_tokens_manager,
+        )
+        self.model_runner.capture_decode_graph()
 
     def init_req_to_tokens_table(
         self, b_req_tokens_table, b_req_idx, b_seq_len, alloc_mem_index

@@ -416,11 +416,11 @@ class KVCacheMemoryManager:
                 # 标记为已使用
                 self.add_ref(select_index)
                 
-                logger.debug(
-                    f"✅ 连续分配成功: 分配了{need_size}个连续token, "
-                    f"范围=[{start_index}, {end_index}), "
-                    f"位置={select_index.tolist()}"
-                )
+                # logger.debug(
+                #     f"✅ 连续分配成功: 分配了{need_size}个连续token, "
+                #     f"范围=[{start_index}, {end_index}), "
+                #     f"位置={select_index.tolist()}"
+                # )
                 return select_index, start_index, end_index
 
         # 分配失败
@@ -476,7 +476,7 @@ class KVCacheMemoryManager:
             select_index, start_index, end_index = alloc_result
             kv_cache = None  # 使用预分配的GPU缓存池，无需临时缓存
             
-            logger.debug(f"🎯 使用连续分配策略: 索引范围=[{start_index}, {end_index})")
+            # logger.debug(f"🎯 使用连续分配策略: 索引范围=[{start_index}, {end_index})")
         else:
             # === 策略2: 降级到非连续分配 ===
             select_index = self.alloc_kvcache(need_size)
