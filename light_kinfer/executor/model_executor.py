@@ -261,14 +261,14 @@ class ModelExecutor:
         self.compiled_model = compiled_model
 
         if max_gpu_num_blocks:
-            self.kv_mem_manager = self._init_mem_manager(max_gpu_num_blocks, block_size=4)
-            self.max_gpu_num_tokens = max_gpu_num_blocks * 4
+            self.kv_mem_manager = self._init_mem_manager(max_gpu_num_blocks, block_size=1)
+            self.max_gpu_num_tokens = max_gpu_num_blocks * 1
         else:
             max_gpu_num_blocks, self.max_gpu_num_tokens = (
-                self._get_max_avaliable_tokens(model,gpu_memory_utilization=0.9, block_size=4)
+                self._get_max_avaliable_tokens(model,gpu_memory_utilization=0.9, block_size=1)
             )
             self.kv_mem_manager = self._init_mem_manager(
-                max_gpu_num_blocks, block_size=4
+                max_gpu_num_blocks, block_size=1
             )
 
         # WARN : 此处如果batch size不为1的前提下，应将max_gpu_num_blocks替换为max_gpu_num_tokens
@@ -734,7 +734,7 @@ class ModelExecutor:
             - 多模态模型: 需要额外处理图像输入，通常包含视觉编码器
         
         注意事项：
-            1. 调用此函数前必须先调用prefill_alloc_kv_cache或decode_alloc_kv_cache
+            1. 调用此函数前必须先调用prefill_alloc_kv_cache或decode_alloc_kv_cache来预先分配新的缓存空间
             2. attention信息必须正确初始化
             3. 对于多模态模型，image_tensor不能为None
             4. 返回的logits需要进一步处理（如采样）才能得到最终的token

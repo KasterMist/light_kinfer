@@ -74,6 +74,7 @@ class FusedAttention(nn.Module):
         xv = F.linear(x, v_proj_weight)
 
         # 2. 应用旋转位置编码到 Q 和 K, 将 xk, xv 合并, 并写入KV缓存
+
         # 重塑为多头注意力的形状: [batch_size*seq_len, num_heads, head_dim]
         xq = xq.view(-1, self.num_q_heads, self.head_dim)
         xk = xk.view(-1, self.num_kv_heads, self.head_dim)

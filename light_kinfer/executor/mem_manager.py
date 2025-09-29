@@ -402,6 +402,7 @@ class KVCacheMemoryManager:
             diff = end_indexs - start_indexs
             
             # === Step 4: 查找第一个连续块 ===
+            # 获取所有连续的块的起始位置索引
             contiguous_blocks = (diff == need_size - 1).nonzero(as_tuple=True)[0]
 
             if contiguous_blocks.numel() > 0:

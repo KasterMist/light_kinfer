@@ -87,9 +87,11 @@ class CUDAGraphRunner:
 
         # === 第二步: 捕获计算图 ===
         # 创建CUDA Graph对象，用于记录后续的操作序列
+        
         self._cuda_graph = torch.cuda.CUDAGraph()
         
         # 在graph context中执行模型，所有操作都会被记录
+        # TODO: 这个函数里面有 pool的选项，可能是用来给定对应的内存池分配，后续可用来进行调试看看不指定会如何
         with torch.cuda.graph(self._cuda_graph):
             self._graph_output = self.model.forward(
                 input_ids=input_ids,
